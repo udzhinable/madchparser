@@ -10,6 +10,9 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.utils.keyboard import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import FSMContext
+from aiogram.utils import executor
 
 # Загрузка переменных окружения
 load_dotenv()
