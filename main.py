@@ -10,13 +10,47 @@ from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
-# Загрузка переменных окружения
-load_dotenv()
-TOKEN = os.getenv("BOT_TOKEN")
+# Конфигурация для Render
+PORT = int(os.environ.get('PORT', 5000))  # Render автоматически назначает порт
+
+async def on_startup(app):
+    """Запуск бота при старте приложения"""
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
+
+async def on_shutdown(app):
+    """Остановка бота при завершении"""
+    await bot.session.close()
 
 # Инициализация бота (новый синтаксис aiogram 3.x)
 bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
+
+if __name__ == '__main__':
+    # Для совместимости с Render добавляем минимальный веб-сервер
+    from aiohttp import web
+    
+    app = web.Application()
+    app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
+    
+    runner = web.AppRunner(app)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(runner.setup())
+    
+    site = web.TCPSite(runner, host='0.0.0.0', port=PORT)
+    loop.run_until_complete(site.start())
+    
+    try:
+        loop.run_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        loop.run_until_complete(runner.cleanup())
+
+# Загрузка переменных окружения
+load_dotenv()
+TOKEN = os.getenv("BOT_TOKEN")
 
 # Хранилище данных
 storage_data = {
