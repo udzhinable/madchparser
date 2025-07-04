@@ -15,7 +15,7 @@ from aiogram.utils.keyboard import ReplyKeyboardMarkup, KeyboardButton
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 
-# Инициализация бота
+# Инициализация бота с указанием порта для Render
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
@@ -107,7 +107,6 @@ async def main_menu_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📊 Баланс предметов")],
-            #[KeyboardButton(text="🧹 Очистить данные")],
             [KeyboardButton(text="📜 Последние записи")]
         ],
         resize_keyboard=True
@@ -129,16 +128,6 @@ async def start(message: types.Message):
         reply_markup=await main_menu_keyboard()
     )
 
-#@dp.message(Command("clear_data"))
-#async def clear_data(message: types.Message):
-#    storage_data["deposits"].clear()
-#    storage_data["withdrawals"].clear()
-#    storage_data["player_names"].clear()
-#    storage_data["all_players"].clear()
-#    storage_data["processed_logs"].clear()
-#    save_data()
-#    await message.answer("Все данные очищены", reply_markup=await main_menu_keyboard())
-
 @dp.message(Command("history"))
 async def show_history(message: types.Message):
     history = sorted(storage_data["processed_logs"], reverse=True)[:10]
@@ -150,20 +139,15 @@ async def show_players(message: types.Message):
         await message.answer("Нет данных об игроках", reply_markup=await main_menu_keyboard())
         return
     
-    # Получаем время последней записи
     last_log_time = "неизвестно"
     if storage_data["processed_logs"]:
         last_hash = sorted(storage_data["processed_logs"], reverse=True)[0]
-        last_log_time = last_hash.split(":")[0]  # Извлекаем временную метку
+        last_log_time = last_hash.split(":")[0]
     
     await message.answer(
         f"Выберите игрока (актуально на {last_log_time}):",
         reply_markup=await players_keyboard()
     )
-
-#@dp.message(lambda m: m.text == "🧹 Очистить данные")
-#async def clear_data_handler(message: types.Message):
-#    await clear_data(message)
 
 @dp.message(lambda m: m.text == "📜 Последние записи")
 async def show_recent_logs(message: types.Message):
@@ -182,21 +166,18 @@ async def show_player_balance(message: types.Message):
     
     report = [f"📊 Баланс игрока {full_name}"]
     
-    # Сначала собираем "Выдано" (отрицательный баланс)
     debt_items = []
     for item in sorted(withdrawals.keys()):
         balance = deposits.get(item, 0) - withdrawals.get(item, 0)
         if balance < 0:
             debt_items.append(f"  - {item}: {abs(balance)} шт. (выдано)")
     
-    # Затем "внес" (положительный баланс)
     credit_items = []
     for item in sorted(deposits.keys()):
         balance = deposits.get(item, 0) - withdrawals.get(item, 0)
         if balance > 0:
             credit_items.append(f"  - {item}: {balance} шт. (внес)")
     
-    # Добавляем в отчёт
     if debt_items:
         report.append("\n🔴 Получил:")
         report.extend(debt_items)
@@ -205,7 +186,6 @@ async def show_player_balance(message: types.Message):
         report.append("\n🟢 Внес:")
         report.extend(credit_items)
     
-    # Итоговая статистика
     total_deposit = sum(deposits.values())
     total_withdrawal = sum(withdrawals.values())
     total_balance = total_deposit - total_withdrawal
@@ -219,7 +199,6 @@ async def show_player_balance(message: types.Message):
 
 async def parse_log(message: types.Message):
     new_logs_count = 0
-    debug_info = []
 
     for line in message.text.split('\n'):
         if not line.strip() or '📰 Журнал Действий' in line:
@@ -232,7 +211,6 @@ async def parse_log(message: types.Message):
         try:
             clean_line = re.sub(r'^\[\🎒\s\d{2}\.\d{2}\s\d{2}:\d{2}:\d{2}\]\s*', '', line)
 
-            # Обработка ДЕПОЗИТОВ (внесение в хранилище)
             if 'отправил в хранилище' in clean_line:
                 sender_part = clean_line.split('отправил в хранилище')[0].strip()
                 item_part = clean_line.split('отправил в хранилище')[1].strip()
@@ -247,7 +225,6 @@ async def parse_log(message: types.Message):
                         storage_data["all_players"].add(full_name)
                         storage_data["player_names"][short_name] = full_name
 
-            # Обработка ВЫДАЧ (из хранилища)
             elif 'отправил из хранилища' in clean_line:
                 recipient_part = clean_line.split('отправил из хранилища')[1].split('🎒')[0].strip()
                 item_part = '🎒' + clean_line.split('🎒')[1] if '🎒' in clean_line else ''
@@ -270,7 +247,6 @@ async def parse_log(message: types.Message):
 
     save_data()
     
-    # Формируем ответ
     response = [
         "✅ Лог успешно обработан",
         f"• Обработано строк: {new_logs_count}",
