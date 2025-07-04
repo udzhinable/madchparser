@@ -4,53 +4,21 @@ import asyncio
 import json
 from collections import defaultdict
 from datetime import datetime
+from aiohttp import web
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
-# Конфигурация для Render
-PORT = int(os.environ.get('PORT', 5000))  # Render автоматически назначает порт
-
-async def on_startup(app):
-    """Запуск бота при старте приложения"""
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
-
-async def on_shutdown(app):
-    """Остановка бота при завершении"""
-    await bot.session.close()
-
-# Инициализация бота (новый синтаксис aiogram 3.x)
-bot = Bot(token=os.getenv("BOT_TOKEN"), parse_mode=ParseMode.HTML)
-dp = Dispatcher()
-
-if __name__ == '__main__':
-    # Для совместимости с Render добавляем минимальный веб-сервер
-    from aiohttp import web
-    
-    app = web.Application()
-    app.on_startup.append(on_startup)
-    app.on_shutdown.append(on_shutdown)
-    
-    runner = web.AppRunner(app)
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(runner.setup())
-    
-    site = web.TCPSite(runner, host='0.0.0.0', port=PORT)
-    loop.run_until_complete(site.start())
-    
-    try:
-        loop.run_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        loop.run_until_complete(runner.cleanup())
-
 # Загрузка переменных окружения
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
+PORT = int(os.environ.get('PORT', 5000))  # Render автоматически назначает порт
+
+# Инициализация бота
+bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
+dp = Dispatcher()
 
 # Хранилище данных
 storage_data = {
@@ -60,7 +28,6 @@ storage_data = {
     "all_players": set(),
     "processed_logs": set()
 }
-
 
 def save_data():
     """Сохраняет данные в файл"""
@@ -88,9 +55,6 @@ def load_data():
     except (FileNotFoundError, json.JSONDecodeError, KeyError):
         pass
 
-# Загружаем данные при старте
-load_data()
-
 def extract_datetime(log_line: str) -> datetime:
     """Извлекает дату и время из строки лога"""
     match = re.search(r'\[🎒 (\d{2}\.\d{2} \d{2}:\d{2}:\d{2})\]', log_line)
@@ -115,7 +79,6 @@ def extract_player_info(line: str) -> tuple:
     """Извлекает полный никнейм и короткое имя игрока"""
     line = line.strip()
     
-    # Вариант для формата [Клан]ЭмодзиИмя
     match = re.search(r'(\[[^\]]+\])([^\[]+)', line)
     if match:
         clan_tag = match.group(1)
@@ -128,7 +91,6 @@ def extract_player_info(line: str) -> tuple:
             short_name = f"{emoji}{name}" if emoji else name
             return full_name, short_name
     
-    # Вариант для формата ЭмодзиИмя
     name_match = re.search(r'([^\w]*)(\w+)', line)
     if name_match:
         emoji = name_match.group(1).strip()
@@ -153,8 +115,7 @@ async def players_keyboard():
 @dp.message(Command("start"))
 async def start(message: types.Message):
     await message.answer(
-        "🔍 Бот для учёта баланса предметов\n"
-        "Отправьте лог действий",
+        "🔍 Бот для учёта баланса предметов\nОтправьте лог действий",
         reply_markup=await main_menu_keyboard()
     )
 
@@ -295,8 +256,46 @@ async def handle_message(message: types.Message):
     else:
         await message.answer("Неизвестная команда", reply_markup=await main_menu_keyboard())
 
-async def main():
+async def run_bot():
+    """Запуск бота"""
     await dp.start_polling(bot)
 
-if __name__ == "__main__":
-    asyncio.run(main())
+async def handle_http(request):
+    """Обработчик HTTP-запросов для Render"""
+    return web.Response(text="Telegram Bot is running")
+
+async def start_app():
+    """Основная функция запуска"""
+    # Загрузка данных
+    load_data()
+    
+    # Создаем веб-приложение
+    app = web.Application()
+    app.router.add_get('/', handle_http)
+    
+    # Запускаем бота в фоне
+    bot_task = asyncio.create_task(run_bot())
+    
+    # Настраиваем веб-сервер
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host='0.0.0.0', port=PORT)
+    await site.start()
+    
+    print(f"Server started on port {PORT}")
+    
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await bot_task.cancel()
+        await runner.cleanup()
+        save_data()
+
+if __name__ == '__main__':
+    try:
+        asyncio.run(start_app())
+    except KeyboardInterrupt:
+        print("Bot stopped")
