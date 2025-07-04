@@ -6,20 +6,16 @@ from collections import defaultdict
 from datetime import datetime
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
-from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
-from aiogram.utils.keyboard import ReplyKeyboardMarkup, KeyboardButton
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.dispatcher import FSMContext
-from aiogram.utils import executor
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 # Загрузка переменных окружения
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 
-# Инициализация бота с указанием порта для Render
-bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+# Инициализация бота (новый синтаксис aiogram 3.x)
+bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 
 # Хранилище данных
@@ -30,6 +26,7 @@ storage_data = {
     "all_players": set(),
     "processed_logs": set()
 }
+
 
 def save_data():
     """Сохраняет данные в файл"""
@@ -107,21 +104,17 @@ def extract_player_info(line: str) -> tuple:
     return "Неизвестный", "Неизвестный"
 
 async def main_menu_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📊 Баланс предметов")],
-            [KeyboardButton(text="📜 Последние записи")]
-        ],
-        resize_keyboard=True
-    )
+    builder = ReplyKeyboardBuilder()
+    builder.row(types.KeyboardButton(text="📊 Баланс предметов"))
+    builder.row(types.KeyboardButton(text="📜 Последние записи"))
+    return builder.as_markup(resize_keyboard=True)
 
 async def players_keyboard():
-    buttons = [KeyboardButton(text=short_name) 
-               for short_name in storage_data["player_names"].keys()]
-    return ReplyKeyboardMarkup(
-        keyboard=[buttons[i:i+2] for i in range(0, len(buttons), 2)],
-        resize_keyboard=True
-    )
+    builder = ReplyKeyboardBuilder()
+    for short_name in storage_data["player_names"].keys():
+        builder.add(types.KeyboardButton(text=short_name))
+    builder.adjust(2)
+    return builder.as_markup(resize_keyboard=True)
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
