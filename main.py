@@ -23,7 +23,7 @@ async def on_shutdown(app):
     await bot.session.close()
 
 # Инициализация бота (новый синтаксис aiogram 3.x)
-bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(token=os.getenv("BOT_TOKEN"), parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 
 if __name__ == '__main__':
